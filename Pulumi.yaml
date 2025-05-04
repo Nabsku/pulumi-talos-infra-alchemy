@@ -1,0 +1,8 @@
+name: proxmox-talos
+description: Deploys a Talos cluster
+runtime: go
+config:
+  pulumi:tags:
+    value: "pulumi:template=go"
+
+

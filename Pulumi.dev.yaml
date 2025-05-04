@@ -1,0 +1,5 @@
+environment:
+  - proxmox-talos/dev
+config:
+  pulumi:tags:
+    value: "pulumi:template=go"
