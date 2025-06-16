@@ -7,6 +7,7 @@ import (
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
 )
 
+// DownloadTalosImage downloads the Talos ISO image to the first available compute node.
 func (p *Proxmox) DownloadTalosImage(ctx *pulumi.Context, factoryOutput *imagefactory.GetUrlsResultOutput) (*download.File, error) {
 	if p.ComputeNodes == nil || len(*p.ComputeNodes) == 0 {
 		return nil, fmt.Errorf("no compute nodes available to download the image")
@@ -26,6 +27,6 @@ func (p *Proxmox) DownloadTalosImage(ctx *pulumi.Context, factoryOutput *imagefa
 	if err != nil {
 		return nil, fmt.Errorf("failed to download Talos image: %w", err)
 	}
-	fmt.Printf("Downloaded Talos image to %s on node %s\n", downloadedImage.FileName, (*p.ComputeNodes)[0].Name())
+	ctx.Log.Info(fmt.Sprintf("Downloaded Talos image to %s on node %s", downloadedImage.FileName, nodeName), nil)
 	return downloadedImage, nil
 }

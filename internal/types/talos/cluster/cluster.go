@@ -11,6 +11,7 @@ import (
 	"proxmox-talos/internal/types/talos/nodes"
 )
 
+// Cluster represents a Talos cluster and its configuration.
 type Cluster struct {
 	Name              string                         `json:"name"`
 	Nodes             []types.Node                   `json:"nodes"`
@@ -22,6 +23,7 @@ type Cluster struct {
 	ClientConfig      *client.GetConfigurationResult `json:"clientConfig,omitempty"`
 }
 
+// NewCluster creates a new Cluster instance.
 func NewCluster(name, talosVersion, kubernetesVersion, kubernetesAPI string) *Cluster {
 	return &Cluster{
 		Name:              name,
@@ -31,8 +33,8 @@ func NewCluster(name, talosVersion, kubernetesVersion, kubernetesAPI string) *Cl
 	}
 }
 
+// GenerateNodes creates the specified number of nodes of the given type and adds them to the cluster.
 func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.NodeType) error {
-	var nodesList []types.Node
 	for i := 0; i < amount; i++ {
 		var node types.Node
 		switch nodeType {
@@ -50,12 +52,12 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 
 		node.SetName(fmt.Sprintf("%s-%s-%d", c.Name, nodeType.String(), i))
 		node.SetPool("default")
-		nodesList = append(nodesList, node)
+		c.Nodes = append(c.Nodes, node)
 	}
-	c.Nodes = append(c.Nodes, nodesList...)
 	return nil
 }
 
+// GetNodesByType returns the names of nodes of the specified type.
 func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
 	nodesOfType := []string{}
 	for _, node := range c.Nodes {
@@ -66,20 +68,23 @@ func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
 	return nodesOfType
 }
 
+// GenerateMachineSecrets creates Talos machine secrets for the cluster.
 func (c *Cluster) GenerateMachineSecrets(ctx *pulumi.Context) error {
 	machineSecrets, err := machine.NewSecrets(ctx, "talos-secrets", &machine.SecretsArgs{
 		TalosVersion: pulumi.String(c.TalosVersion),
 	})
 
 	if err != nil {
-		if err := ctx.Log.Error("Creating Talos Secrets failed with: "+err.Error(), nil); err != nil {
-			return err
+		if logErr := ctx.Log.Error("Creating Talos Secrets failed with: "+err.Error(), nil); logErr != nil {
+			return logErr
 		}
+		return err
 	}
 	c.MachineSecrets = machineSecrets
 	return nil
 }
 
+// WaitForReady waits for the Talos cluster to become healthy.
 func (c *Cluster) WaitForReady(ctx *pulumi.Context) {
 	if len(c.Nodes) == 0 || c.ClientConfig == nil {
 		return
@@ -100,13 +105,11 @@ func (c *Cluster) WaitForReady(ctx *pulumi.Context) {
 
 	_, err := cluster.GetHealth(ctx, args)
 	if err != nil {
-		if err := ctx.Log.Error("Waiting for Talos Cluster to be ready failed with: "+err.Error(), nil); err != nil {
-			return
-		}
+		_ = ctx.Log.Error("Waiting for Talos Cluster to be ready failed with: "+err.Error(), nil)
 	}
-
 }
 
+// String returns a string representation of the cluster.
 func (c *Cluster) String() string {
 	return fmt.Sprintf("Cluster{Name: %s, Nodes: %d, HasBootstrapNode: %t, TalosVersion: %s, KubernetesVersion: %s, KubernetesAPI: %s}",
 		c.Name, len(c.Nodes), c.HasBootstrapNode, c.TalosVersion, c.KubernetesVersion, c.KubernetesAPI)

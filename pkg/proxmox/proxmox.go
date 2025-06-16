@@ -8,6 +8,7 @@ import (
 	"proxmox-talos/internal/types/proxmox"
 )
 
+// Proxmox is a wrapper around the internal Proxmox type for Pulumi integration.
 type Proxmox proxmox.Proxmox
 type VirtualMachine proxmox.VirtualMachine
 
@@ -54,7 +55,7 @@ func (p *Proxmox) GatherHosts(ctx *pulumi.Context) error {
 			ctx.Log.Error("Node name is empty at index "+string(rune(i)), nil)
 		}
 
-		if availableNodes.Onlines[i] == false {
+		if !availableNodes.Onlines[i] {
 			ctx.Log.Debug("Node "+node+" is offline", nil)
 			continue
 		}

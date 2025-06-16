@@ -5,6 +5,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Config represents the Talos network VIP configuration.
 type Config struct {
 	Machine struct {
 		Network struct {
@@ -20,6 +21,7 @@ type Config struct {
 	} `yaml:"machine" json:"machine"`
 }
 
+// Marshal converts YAML bytes to JSON bytes for the Config struct.
 func (c *Config) Marshal(b []byte) []byte {
 	var config Config
 	if err := yaml.Unmarshal(b, &config); err != nil {
@@ -31,5 +33,4 @@ func (c *Config) Marshal(b []byte) []byte {
 		return []byte("")
 	}
 	return jsonData
-
 }

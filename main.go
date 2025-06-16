@@ -60,25 +60,20 @@ func main() {
 			return ctx.Log.Error("Generating worker nodes failed with: "+err.Error(), nil)
 		}
 
-		err := tCluster.GenerateMachineSecrets(ctx)
+		if err := tCluster.GenerateMachineSecrets(ctx); err != nil {
+			return err
+		}
+
+		ctx.Log.Info(fmt.Sprintf("Generated Talos Cluster: %s", tCluster.String()), nil)
+		ctx.Log.Info(fmt.Sprintf("Nodes: %v", tCluster.Nodes), nil)
+
+		proxmoxStruct, err := proxmox.NewProxmox(ctx, conf)
 		if err != nil {
 			return err
 		}
 
-		fmt.Println("Generated Talos Cluster:", tCluster)
-		fmt.Println("Nodes:", tCluster.Nodes)
-
-		proxmoxStruct, err := proxmox.NewProxmox(ctx, conf)
-		if err != nil {
-			if err := ctx.Log.Error("Creating Proxmox Provider failed with: "+err.Error(), nil); err != nil {
-				return err
-			}
-		}
-
 		if err := proxmoxStruct.GatherHosts(ctx); err != nil {
-			if err := ctx.Log.Error("Gathering Proxmox hosts failed with: "+err.Error(), nil); err != nil {
-				return err
-			}
+			return err
 		}
 
 		talosImage, err := imagefactory.NewSchematic(ctx, "talos-image-from-factory", &imagefactory.SchematicArgs{
@@ -90,9 +85,7 @@ customization:
 `, strings.Join(extensions, "\n      - "))),
 		})
 		if err != nil {
-			if err := ctx.Log.Error("Creating Talos Provider failed with: "+err.Error(), nil); err != nil {
-				return err
-			}
+			return ctx.Log.Error("Creating Talos Provider failed with: "+err.Error(), nil)
 		}
 
 		factoryArgs := imagefactory.GetUrlsOutputArgs{
@@ -110,13 +103,11 @@ customization:
 
 		downloadedImage, err := proxmoxStruct.DownloadTalosImage(ctx, &factoryOutput)
 		if err != nil {
-			if err := ctx.Log.Error("Downloading Talos Image failed with: "+err.Error(), nil); err != nil {
-				return err
-			}
+			return ctx.Log.Error("Downloading Talos Image failed with: "+err.Error(), nil)
 		}
 
 		for i, node := range tCluster.Nodes {
-			fmt.Printf("Creating VM for node: %s\n", node.Name())
+			ctx.Log.Info(fmt.Sprintf("Creating VM for node: %s", node.Name()), nil)
 			createdVM, err := vm.NewVirtualMachine(ctx, node.Name(), &vm.VirtualMachineArgs{
 				NodeName: pulumi.String(availableNodes.Names[i%len(availableNodes.Names)]),
 				Name:     pulumi.String(node.Name()),
@@ -181,7 +172,7 @@ customization:
 		}
 
 		for _, node := range tCluster.Nodes {
-			fmt.Printf("Creating Talos Node for type %s and name %s\n", node.Type().String(), node.Name())
+			ctx.Log.Info(fmt.Sprintf("Creating Talos Node for type %s and name %s", node.Type().String(), node.Name()), nil)
 			configuration := machine.GetConfigurationOutput(ctx, machine.GetConfigurationOutputArgs{
 				ClusterName:     pulumi.String(tCluster.Name),
 				MachineType:     pulumi.String(node.Type().String()),
@@ -239,9 +230,7 @@ customization:
 			apply, err := machine.NewConfigurationApply(ctx, fmt.Sprintf("%s-configuration-apply", node.Name()),
 				&applyArgs)
 			if err != nil {
-				if err := ctx.Log.Error("Creating Talos Configuration Apply failed with: "+err.Error(), nil); err != nil {
-					return err
-				}
+				return ctx.Log.Error("Creating Talos Configuration Apply failed with: "+err.Error(), nil)
 			}
 
 			if node.IsBootstrap() {
@@ -259,18 +248,15 @@ customization:
 					pulumi.Timeouts(&customTimeouts))
 
 				if err != nil {
-					if err := ctx.Log.Error("Creating Talos Bootstrap failed with: "+err.Error(), nil); err != nil {
-						return err
-					}
-				} else {
-					fmt.Printf("Node %s is bootstrapped\n", node.Name())
+					return ctx.Log.Error("Creating Talos Bootstrap failed with: "+err.Error(), nil)
 				}
+				ctx.Log.Info(fmt.Sprintf("Node %s is bootstrapped", node.Name()), nil)
 			}
 
 			tCluster.WaitForReady(ctx)
-			fmt.Printf("Cluster %s is ready\n", tCluster.Name)
-
+			ctx.Log.Info(fmt.Sprintf("Cluster %s is ready", tCluster.Name), nil)
 		}
+
 		if err := ctx.Log.Info("Pulumi Talos Proxmox deployment completed successfully", nil); err != nil {
 			ctx.Log.Error("Logging completion message failed: "+err.Error(), nil)
 		}

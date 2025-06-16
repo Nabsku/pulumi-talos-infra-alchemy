@@ -4,6 +4,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
+// NodeType represents the type of a node in the cluster.
 type NodeType int
 
 const (
@@ -13,6 +14,7 @@ const (
 	Other // For any other node types that may be added in the future
 )
 
+// String returns the string representation of the NodeType.
 func (n NodeType) String() string {
 	switch n {
 	case ControlPlane:
@@ -28,13 +30,14 @@ func (n NodeType) String() string {
 	}
 }
 
+// Node is the interface that all cluster nodes must implement.
 type Node interface {
 	Type() NodeType
 	Pool() string
 	SetPool(pool string)
 	Name() string
-	IP() pulumi.StringOutput
 	SetName(name string)
+	IP() pulumi.StringOutput
 	SetIP(ip pulumi.StringOutput)
 	IsBootstrap() bool
 	SetBootstrap(isBootstrap bool)

@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// YamlToJSON takes YAML bytes and returns JSON bytes.
+// YamlToJSON converts YAML bytes to JSON bytes.
 func YamlToJSON(yamlBytes []byte) ([]byte, error) {
 	var data any
 	if err := yaml.Unmarshal(yamlBytes, &data); err != nil {
@@ -17,7 +17,7 @@ func YamlToJSON(yamlBytes []byte) ([]byte, error) {
 	return json.Marshal(data)
 }
 
-// Helper to recursively convert map keys to string
+// convertKeysToString recursively converts map keys to strings.
 func convertKeysToString(i any) any {
 	switch x := i.(type) {
 	case map[any]any:
