@@ -9,19 +9,52 @@ import (
 
 // VMConfig holds the configuration for creating a Proxmox VM.
 type VMConfig struct {
-	Name           string
-	NodeName       string
-	Cores          int
-	MemoryMB       int
-	DiskSizeGB     int
-	NetworkBridge  string
-	CdromFileID    pulumi.IDOutput
-	Provider       pulumi.ProviderResource
-	DependsOn      []pulumi.Resource
+	Name          string
+	NodeName      string
+	Cores         int
+	MemoryMB      int
+	DiskSizeGB    int
+	NetworkBridge string
+	CdromFileID   pulumi.IDOutput
+	Provider      pulumi.ProviderResource
+	DependsOn     []pulumi.Resource
+}
+
+// Validate checks the VMConfig for required fields and returns an error if any are missing or invalid.
+func (cfg *VMConfig) Validate() error {
+	if cfg.Name == "" {
+		return fmt.Errorf("VMConfig: Name is required")
+	}
+	if cfg.NodeName == "" {
+		return fmt.Errorf("VMConfig: NodeName is required")
+	}
+	if cfg.Cores <= 0 {
+		return fmt.Errorf("VMConfig: Cores must be > 0")
+	}
+	if cfg.MemoryMB <= 0 {
+		return fmt.Errorf("VMConfig: MemoryMB must be > 0")
+	}
+	if cfg.DiskSizeGB <= 0 {
+		return fmt.Errorf("VMConfig: DiskSizeGB must be > 0")
+	}
+	if cfg.NetworkBridge == "" {
+		return fmt.Errorf("VMConfig: NetworkBridge is required")
+	}
+	if cfg.CdromFileID == nil {
+		return fmt.Errorf("VMConfig: CdromFileID is required")
+	}
+	if cfg.Provider == nil {
+		return fmt.Errorf("VMConfig: Provider is required")
+	}
+	return nil
 }
 
 // CreateVM creates a new Proxmox VM with the given configuration and returns the VM resource and its IP output.
 func CreateVM(ctx *pulumi.Context, cfg VMConfig) (*vm.VirtualMachine, pulumi.StringOutput, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, pulumi.String("").ToStringOutput(), fmt.Errorf("invalid VMConfig: %w", err)
+	}
+
 	vmArgs := &vm.VirtualMachineArgs{
 		NodeName: pulumi.String(cfg.NodeName),
 		Name:     pulumi.String(cfg.Name),
