@@ -9,7 +9,6 @@ import (
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
 	"proxmox-talos/internal/types"
 	"proxmox-talos/internal/types/talos/nodes"
-	"context"
 )
 
 type Cluster struct {
