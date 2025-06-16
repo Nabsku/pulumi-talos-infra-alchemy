@@ -85,9 +85,9 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
 	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
-		ClusterName:     c.Name,
-		ClusterEndpoint: c.KubernetesAPI,
-		MachineSecrets:  c.MachineSecrets.MachineSecrets,
+		ClusterName:    c.Name,
+		Endpoint:       c.KubernetesAPI,
+		MachineSecrets: c.MachineSecrets.MachineSecrets,
 	})
 	if err != nil {
 		if err := ctx.Log.Error("Generating Talos client config failed with: "+err.Error(), nil); err != nil {
