@@ -57,7 +57,7 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 }
 
 func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
-	nodesOfType := make([]string, len(c.Nodes))
+	nodesOfType := []string{}
 	for _, node := range c.Nodes {
 		if node.Type() == nodeType {
 			nodesOfType = append(nodesOfType, node.Name())

@@ -50,10 +50,7 @@ func main() {
 		conf := config.New(ctx, "")
 
 		if !isOdd(controlPlaneCount) {
-			if err := ctx.Log.Error("control plane count must be odd", nil); err != nil {
-				return err
-			}
-			os.Exit(1)
+			return fmt.Errorf("control plane count must be odd")
 		}
 
 		tCluster := talosCluster.NewCluster(talosClusterName, talosVersion, kubernetesVersion, talosApiVIP)
@@ -213,7 +210,7 @@ customization:
 			}
 
 			json0 := string(tmpJSON0)
-			var cpPatch []byte
+			var cpPatchStr string
 
 			if node.Type() == types.ControlPlane {
 				var rendered bytes.Buffer
@@ -228,22 +225,25 @@ customization:
 
 				fmt.Printf("Control Plane API Configuration: %s\n", rendered.String())
 
-				cpPatch, err = patches.YamlToJSON(rendered.Bytes())
+				cpPatch, err := patches.YamlToJSON(rendered.Bytes())
 				if err != nil {
 					return fmt.Errorf("failed to convert controlplane API configuration to JSON: %w", err)
 				}
 				fmt.Printf("Control Plane Patch: %s\n", cpPatch)
+				cpPatchStr = string(cpPatch)
+			}
+
+			configPatches := pulumi.StringArray{pulumi.String(json0)}
+			if cpPatchStr != "" {
+				configPatches = append(configPatches, pulumi.String(cpPatchStr))
 			}
 
 			applyArgs := machine.ConfigurationApplyArgs{
 				ClientConfiguration:       tCluster.MachineSecrets.ClientConfiguration,
 				MachineConfigurationInput: configuration.MachineConfiguration(),
 				Node:                      pulumi.String(node.Name()),
-				ConfigPatches: pulumi.StringArray{
-					pulumi.String(json0),
-					pulumi.String(cpPatch),
-				},
-				Endpoint: node.IP(),
+				ConfigPatches:             configPatches,
+				Endpoint:                  node.IP(),
 			}
 
 			apply, err := machine.NewConfigurationApply(ctx, fmt.Sprintf("%s-configuration-apply", node.Name()),
