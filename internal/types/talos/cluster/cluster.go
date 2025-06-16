@@ -57,7 +57,7 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 }
 
 func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
-	nodesOfType := make([]string, len(c.Nodes))
+	var nodesOfType []string
 	for _, node := range c.Nodes {
 		if node.Type() == nodeType {
 			nodesOfType = append(nodesOfType, node.Name())
@@ -84,10 +84,13 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 	if c.MachineSecrets == nil {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
+
+	// Compose the GetConfigurationArgs using only the valid fields
 	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
-		ClusterName:    c.Name,
-		Endpoint:       c.KubernetesAPI,
-		MachineSecrets: c.MachineSecrets.MachineSecrets,
+		ClientConfiguration: c.MachineSecrets.ClientConfiguration,
+		ClusterName:         c.Name,
+		Endpoints:           []string{c.KubernetesAPI},
+		Nodes:               c.GetNodesByType(types.ControlPlane),
 	})
 	if err != nil {
 		if err := ctx.Log.Error("Generating Talos client config failed with: "+err.Error(), nil); err != nil {
