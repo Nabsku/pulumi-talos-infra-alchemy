@@ -46,12 +46,12 @@ func (c *ControlPlaneNode) Pool() string {
 
 // Create is a stub for VM creation logic.
 func (c *ControlPlaneNode) Create() error {
-	panic("Create not implemented for ControlPlaneNode")
+	return nil
 }
 
 // Destroy is a stub for VM destruction logic.
 func (c *ControlPlaneNode) Destroy() error {
-	panic("Destroy not implemented for ControlPlaneNode")
+	return nil
 }
 
 // Name returns the name of the node.

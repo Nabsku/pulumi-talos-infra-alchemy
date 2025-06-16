@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve/cluster"
-	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve/vm"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
@@ -13,7 +12,7 @@ import (
 	"proxmox-talos/internal/types"
 	talosCluster "proxmox-talos/internal/types/talos/cluster"
 	"proxmox-talos/pkg/proxmox"
-	patches "proxmox-talos/pkg/talos"
+	"proxmox-talos/pkg/talos"
 	"strings"
 	"text/template"
 )
@@ -106,69 +105,26 @@ customization:
 			return ctx.Log.Error("Downloading Talos Image failed with: "+err.Error(), nil)
 		}
 
+		// Use the new VMConfig and CreateVM abstraction for VM creation
 		for i, node := range tCluster.Nodes {
 			ctx.Log.Info(fmt.Sprintf("Creating VM for node: %s", node.Name()), nil)
-			createdVM, err := vm.NewVirtualMachine(ctx, node.Name(), &vm.VirtualMachineArgs{
-				NodeName: pulumi.String(availableNodes.Names[i%len(availableNodes.Names)]),
-				Name:     pulumi.String(node.Name()),
-				Agent: &vm.VirtualMachineAgentArgs{
-					Enabled: pulumi.Bool(true),
-				},
-				Machine: pulumi.String("q35"),
-				Cpu: &vm.VirtualMachineCpuArgs{
-					Cores:   pulumi.Int(cores),
-					Sockets: pulumi.Int(1),
-					Numa:    pulumi.Bool(true),
-					Type:    pulumi.String("x86-64-v2-AES"),
-				},
-				Memory: &vm.VirtualMachineMemoryArgs{
-					Dedicated: pulumi.Int(memory),
-				},
-				Disks: &vm.VirtualMachineDiskArray{
-					&vm.VirtualMachineDiskArgs{
-						Interface:   pulumi.String("virtio0"),
-						Size:        pulumi.Int(diskSize),
-						DatastoreId: pulumi.String("local"),
-						Speed: &vm.VirtualMachineDiskSpeedArgs{
-							IopsRead:           pulumi.Int(0),
-							IopsReadBurstable:  pulumi.Int(0),
-							IopsWrite:          pulumi.Int(0),
-							IopsWriteBurstable: pulumi.Int(0),
-							Read:               pulumi.Int(0),
-							ReadBurstable:      pulumi.Int(0),
-							Write:              pulumi.Int(0),
-							WriteBurstable:     pulumi.Int(0),
-						},
-					},
-				},
-				SerialDevices: nil,
-				BootOrders:    pulumi.StringArray{pulumi.String("virtio0"), pulumi.String("ide3")},
-				StopOnDestroy: pulumi.Bool(true),
-				OperatingSystem: &vm.VirtualMachineOperatingSystemArgs{
-					Type: pulumi.String("l26"),
-				},
-				NetworkDevices: &vm.VirtualMachineNetworkDeviceArray{
-					&vm.VirtualMachineNetworkDeviceArgs{
-						Bridge: pulumi.String(network),
-					},
-				},
-				Cdrom: &vm.VirtualMachineCdromArgs{
-					FileId: downloadedImage.ID(),
-				},
-			}, pulumi.Provider(proxmoxStruct.Provider), pulumi.DependsOn([]pulumi.Resource{downloadedImage}))
-			if err != nil {
-				return err
+			vmConfig := proxmox.VMConfig{
+				Name:          node.Name(),
+				NodeName:      availableNodes.Names[i%len(availableNodes.Names)],
+				Cores:         cores,
+				MemoryMB:      memory,
+				DiskSizeGB:    diskSize,
+				NetworkBridge: network,
+				CdromFileID:   downloadedImage.ID(),
+				Provider:      proxmoxStruct.Provider,
+				DependsOn:     []pulumi.Resource{downloadedImage},
 			}
-
-			ip := createdVM.Ipv4Addresses.ApplyT(func(ipv4 [][]string) string {
-				lastInner := ipv4[len(ipv4)-1]
-				if len(lastInner) > 0 {
-					return lastInner[len(lastInner)-1]
-				}
-				return ""
-			}).(pulumi.StringOutput)
-
+			createdVM, ip, err := proxmox.CreateVM(ctx, vmConfig)
+			if err != nil {
+				return ctx.Log.Error(fmt.Sprintf("Failed to create VM for node %s: %v", node.Name(), err), nil)
+			}
 			node.SetIP(ip)
+			node.SetVM(createdVM)
 		}
 
 		for _, node := range tCluster.Nodes {
@@ -207,7 +163,7 @@ customization:
 					return fmt.Errorf("failed to render controlplane API configuration: %w", err)
 				}
 
-				cpPatch, err := patches.YamlToJSON(rendered.Bytes())
+				cpPatch, err := talos.YamlToJSON(rendered.Bytes())
 				if err != nil {
 					return fmt.Errorf("failed to convert controlplane API configuration to JSON: %w", err)
 				}
