@@ -75,9 +75,6 @@ func main() {
 			return err
 		}
 
-		// Optionally, export the talosConfig as a Pulumi stack output
-		ctx.Export("talosConfig", pulumi.String(tCluster.ClientConfig.Talosconfig))
-
 		fmt.Println("Generated Talos Cluster:", tCluster)
 		fmt.Println("Nodes:", tCluster.Nodes)
 

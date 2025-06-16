@@ -57,7 +57,7 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 }
 
 func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
-	var nodesOfType []string
+	nodesOfType := make([]string, len(c.Nodes))
 	for _, node := range c.Nodes {
 		if node.Type() == nodeType {
 			nodesOfType = append(nodesOfType, node.Name())
@@ -84,32 +84,10 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 	if c.MachineSecrets == nil {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
-
-	// Extract the actual string values from pulumi.StringOutput using ctx.Export and ctx.StackReference
-	clientCert, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.ClientCertificate())
-	if err != nil {
-		return fmt.Errorf("failed to extract client certificate: %w", err)
-	}
-	clientKey, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.ClientKey())
-	if err != nil {
-		return fmt.Errorf("failed to extract client key: %w", err)
-	}
-	caCert, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.CaCertificate())
-	if err != nil {
-		return fmt.Errorf("failed to extract CA certificate: %w", err)
-	}
-
-	clientConfigInput := client.GetConfigurationClientConfiguration{
-		ClientCertificate: clientCert,
-		ClientKey:         clientKey,
-		CaCertificate:     caCert,
-	}
-
 	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
-		ClientConfiguration: clientConfigInput,
-		ClusterName:         c.Name,
-		Endpoints:           []string{c.KubernetesAPI},
-		Nodes:               c.GetNodesByType(types.ControlPlane),
+		ClusterName:     c.Name,
+		ClusterEndpoint: c.KubernetesAPI,
+		MachineSecrets:  c.MachineSecrets.MachineSecrets,
 	})
 	if err != nil {
 		if err := ctx.Log.Error("Generating Talos client config failed with: "+err.Error(), nil); err != nil {
@@ -119,24 +97,6 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 	}
 	c.ClientConfig = clientConfig
 	return nil
-}
-
-// Helper to synchronously extract a string from pulumi.StringOutput
-func getStringOutputValue(ctx *pulumi.Context, out pulumi.StringOutput) (string, error) {
-	var result string
-	var err error
-	done := make(chan struct{})
-	out.ApplyT(func(v string) string {
-		result = v
-		close(done)
-		return v
-	})
-	select {
-	case <-done:
-		return result, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
 }
 
 func (c *Cluster) WaitForReady(ctx *pulumi.Context) {
