@@ -180,6 +180,32 @@ customization:
 			node.SetIP(ip)
 		}
 
+		// --- BEGIN: Collect control plane IPs and generate kubeconfig/talosconfig ---
+		var controlPlaneIPs []pulumi.StringOutput
+		for _, node := range tCluster.Nodes {
+			if node.Type() == types.ControlPlane {
+				controlPlaneIPs = append(controlPlaneIPs, node.IP())
+			}
+		}
+
+		// Aggregate all control plane IPs into a single Output
+		controlPlaneIPsOutput := pulumi.All(controlPlaneIPs...).ApplyT(func(ips []interface{}) []string {
+			result := make([]string, len(ips))
+			for i, ip := range ips {
+				result[i] = ip.(string)
+			}
+			return result
+		}).(pulumi.StringArrayOutput)
+
+		// Example: Generate a kubeconfig string using the IPs (replace with your real logic)
+		kubeconfigOutput := controlPlaneIPsOutput.ApplyT(func(ips []string) string {
+			// This is just a placeholder. Replace with your actual kubeconfig/talosconfig generation logic.
+			return fmt.Sprintf("apiVersion: v1\nclusters:\n- cluster:\n    server: https://%s:6443\n  name: talos\n", ips[0])
+		}).(pulumi.StringOutput)
+
+		ctx.Export("kubeconfig", kubeconfigOutput)
+		// --- END: Collect control plane IPs and generate kubeconfig/talosconfig ---
+
 		for _, node := range tCluster.Nodes {
 			fmt.Printf("Creating Talos Node for type %s and name %s\n", node.Type().String(), node.Name())
 			configuration := machine.GetConfigurationOutput(ctx, machine.GetConfigurationOutputArgs{
