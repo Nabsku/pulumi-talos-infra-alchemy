@@ -86,20 +86,18 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
 
-	// Extract the actual string values from pulumi.StringOutput using ApplyT and ctx
-	var clientCert, clientKey, caCert string
-	err := pulumi.All(
-		c.MachineSecrets.ClientConfiguration.ClientCertificate(),
-		c.MachineSecrets.ClientConfiguration.ClientKey(),
-		c.MachineSecrets.ClientConfiguration.CaCertificate(),
-	).ApplyT(func(args []interface{}) error {
-		clientCert = args[0].(string)
-		clientKey = args[1].(string)
-		caCert = args[2].(string)
-		return nil
-	}).(pulumi.Output).Await(context.Background())
+	// Extract the actual string values from pulumi.StringOutput using ctx.Export and ctx.StackReference
+	clientCert, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.ClientCertificate())
 	if err != nil {
-		return fmt.Errorf("failed to extract client configuration secrets: %w", err)
+		return fmt.Errorf("failed to extract client certificate: %w", err)
+	}
+	clientKey, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.ClientKey())
+	if err != nil {
+		return fmt.Errorf("failed to extract client key: %w", err)
+	}
+	caCert, err := getStringOutputValue(ctx, c.MachineSecrets.ClientConfiguration.CaCertificate())
+	if err != nil {
+		return fmt.Errorf("failed to extract CA certificate: %w", err)
 	}
 
 	clientConfigInput := client.GetConfigurationClientConfiguration{
@@ -122,6 +120,24 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 	}
 	c.ClientConfig = clientConfig
 	return nil
+}
+
+// Helper to synchronously extract a string from pulumi.StringOutput
+func getStringOutputValue(ctx *pulumi.Context, out pulumi.StringOutput) (string, error) {
+	var result string
+	var err error
+	done := make(chan struct{})
+	out.ApplyT(func(v string) string {
+		result = v
+		close(done)
+		return v
+	})
+	select {
+	case <-done:
+		return result, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 func (c *Cluster) WaitForReady(ctx *pulumi.Context) {
