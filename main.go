@@ -10,7 +10,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
-	"os"
 	"proxmox-talos/internal/types"
 	talosCluster "proxmox-talos/internal/types/talos/cluster"
 	"proxmox-talos/pkg/proxmox"
@@ -62,12 +61,6 @@ func main() {
 		}
 
 		err := tCluster.GenerateMachineSecrets(ctx)
-		if err != nil {
-			return err
-		}
-
-		// Generate the Talos client config (talosConfig) for the cluster
-		err = tCluster.GenerateClientConfig(ctx)
 		if err != nil {
 			return err
 		}
@@ -223,13 +216,10 @@ customization:
 					return fmt.Errorf("failed to render controlplane API configuration: %w", err)
 				}
 
-				fmt.Printf("Control Plane API Configuration: %s\n", rendered.String())
-
 				cpPatch, err := patches.YamlToJSON(rendered.Bytes())
 				if err != nil {
 					return fmt.Errorf("failed to convert controlplane API configuration to JSON: %w", err)
 				}
-				fmt.Printf("Control Plane Patch: %s\n", cpPatch)
 				cpPatchStr = string(cpPatch)
 			}
 
