@@ -48,20 +48,6 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 			return errors.New("unknown node type")
 		}
 
-		//deterministicNodeId, err := random.NewRandomId(ctx, fmt.Sprintf("%s-%d", node.Type(), i), &random.RandomIdArgs{
-		//	ByteLength: pulumi.Int(4),
-		//})
-		//if err != nil {
-		//	return fmt.Errorf("failed to generate random ID for node: %v", err)
-		//}
-
-		//deterministicNodeId.Hex.ApplyT(func(id string) error {
-		//	fmt.Printf("Node name set to: %s\n", node.Name())
-		//	fmt.Printf("Node pool set to: %s\n", node.Pool())
-		//	c.Nodes = append(c.Nodes, node)
-		//	return nil
-		//})
-
 		node.SetName(fmt.Sprintf("%s-%s-%d", c.Name, nodeType.String(), i))
 		node.SetPool("default")
 		nodesList = append(nodesList, node)
@@ -91,6 +77,25 @@ func (c *Cluster) GenerateMachineSecrets(ctx *pulumi.Context) error {
 		}
 	}
 	c.MachineSecrets = machineSecrets
+	return nil
+}
+
+func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
+	if c.MachineSecrets == nil {
+		return fmt.Errorf("machine secrets must be generated before generating client config")
+	}
+	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
+		ClusterName:     c.Name,
+		ClusterEndpoint: c.KubernetesAPI,
+		MachineSecrets:  c.MachineSecrets.MachineSecrets,
+	})
+	if err != nil {
+		if err := ctx.Log.Error("Generating Talos client config failed with: "+err.Error(), nil); err != nil {
+			return err
+		}
+		return err
+	}
+	c.ClientConfig = clientConfig
 	return nil
 }
 

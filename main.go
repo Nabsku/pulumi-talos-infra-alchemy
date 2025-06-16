@@ -69,6 +69,15 @@ func main() {
 			return err
 		}
 
+		// Generate the Talos client config (talosConfig) for the cluster
+		err = tCluster.GenerateClientConfig(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Optionally, export the talosConfig as a Pulumi stack output
+		ctx.Export("talosConfig", pulumi.String(tCluster.ClientConfig.Talosconfig))
+
 		fmt.Println("Generated Talos Cluster:", tCluster)
 		fmt.Println("Nodes:", tCluster.Nodes)
 
@@ -183,11 +192,6 @@ customization:
 
 			node.SetIP(ip)
 		}
-
-		//err = tCluster.GenerateClientConfig(ctx)
-		//if err != nil {
-		//	return err
-		//}
 
 		for _, node := range tCluster.Nodes {
 			fmt.Printf("Creating Talos Node for type %s and name %s\n", node.Type().String(), node.Name())
