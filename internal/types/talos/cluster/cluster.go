@@ -9,6 +9,7 @@ import (
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
 	"proxmox-talos/internal/types"
 	"proxmox-talos/internal/types/talos/nodes"
+	"context"
 )
 
 type Cluster struct {
@@ -85,11 +86,26 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
 
-	// Convert ClientConfigurationOutput to GetConfigurationClientConfiguration
+	// Extract the actual string values from pulumi.StringOutput using ApplyT and ctx
+	var clientCert, clientKey, caCert string
+	err := pulumi.All(
+		c.MachineSecrets.ClientConfiguration.ClientCertificate(),
+		c.MachineSecrets.ClientConfiguration.ClientKey(),
+		c.MachineSecrets.ClientConfiguration.CaCertificate(),
+	).ApplyT(func(args []interface{}) error {
+		clientCert = args[0].(string)
+		clientKey = args[1].(string)
+		caCert = args[2].(string)
+		return nil
+	}).(pulumi.Output).Await(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to extract client configuration secrets: %w", err)
+	}
+
 	clientConfigInput := client.GetConfigurationClientConfiguration{
-		ClientCertificate: c.MachineSecrets.ClientConfiguration.ClientCertificate,
-		ClientKey:         c.MachineSecrets.ClientConfiguration.ClientKey,
-		CaCertificate:     c.MachineSecrets.ClientConfiguration.CaCertificate,
+		ClientCertificate: clientCert,
+		ClientKey:         clientKey,
+		CaCertificate:     caCert,
 	}
 
 	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
