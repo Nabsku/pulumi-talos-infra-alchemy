@@ -85,9 +85,15 @@ func (c *Cluster) GenerateClientConfig(ctx *pulumi.Context) error {
 		return fmt.Errorf("machine secrets must be generated before generating client config")
 	}
 
-	// Compose the GetConfigurationArgs using only the valid fields
+	// Convert ClientConfigurationOutput to GetConfigurationClientConfiguration
+	clientConfigInput := client.GetConfigurationClientConfiguration{
+		ClientCertificate: c.MachineSecrets.ClientConfiguration.ClientCertificate,
+		ClientKey:         c.MachineSecrets.ClientConfiguration.ClientKey,
+		CaCertificate:     c.MachineSecrets.ClientConfiguration.CaCertificate,
+	}
+
 	clientConfig, err := client.GetConfiguration(ctx, &client.GetConfigurationArgs{
-		ClientConfiguration: c.MachineSecrets.ClientConfiguration,
+		ClientConfiguration: clientConfigInput,
 		ClusterName:         c.Name,
 		Endpoints:           []string{c.KubernetesAPI},
 		Nodes:               c.GetNodesByType(types.ControlPlane),
