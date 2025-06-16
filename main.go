@@ -10,8 +10,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
-	talosclient "github.com/pulumiverse/pulumi-talos/sdk/go/talos/client"
-	taloscluster "github.com/pulumiverse/pulumi-talos/sdk/go/talos/cluster"
 	"proxmox-talos/internal/types"
 	talosCluster "proxmox-talos/internal/types/talos/cluster"
 	"proxmox-talos/pkg/proxmox"
@@ -181,32 +179,6 @@ customization:
 
 			node.SetIP(ip)
 		}
-
-		// --- BEGIN: Use Talos provider to generate talosconfig and kubeconfig ---
-		// Gather all control plane node IPs as []pulumi.StringInput
-		var controlPlaneIPs []pulumi.StringInput
-		for _, node := range tCluster.Nodes {
-			if node.Type() == types.ControlPlane {
-				controlPlaneIPs = append(controlPlaneIPs, node.IP())
-			}
-		}
-
-		// Generate Talos client config (talosconfig)
-		talosConfig := talosclient.GetConfigurationOutput(ctx, &talosclient.GetConfigurationOutputArgs{
-			ClusterName:     pulumi.String(tCluster.Name),
-			ClusterEndpoint: pulumi.String(tCluster.KubernetesAPI),
-			MachineSecrets:  tCluster.MachineSecrets.MachineSecrets,
-		}, nil)
-
-		// Generate kubeconfig using Talos provider
-		kubeConfig := taloscluster.GetKubeconfigOutput(ctx, &taloscluster.GetKubeconfigOutputArgs{
-			ClientConfiguration: talosConfig.ClientConfiguration(),
-			Endpoints:           pulumi.ToStringArray(controlPlaneIPs),
-		}, nil)
-
-		ctx.Export("talosconfig", talosConfig.Config())
-		ctx.Export("kubeconfig", kubeConfig.Kubeconfig())
-		// --- END: Use Talos provider to generate talosconfig and kubeconfig ---
 
 		for _, node := range tCluster.Nodes {
 			fmt.Printf("Creating Talos Node for type %s and name %s\n", node.Type().String(), node.Name())
