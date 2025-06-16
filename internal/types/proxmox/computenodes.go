@@ -49,3 +49,17 @@ func (c *ComputeNode) Memory() int {
 func (c *ComputeNode) SetMemory(memory int) {
 	c.memory = memory
 }
+
+// Validate checks if the compute node has valid configuration.
+func (c *ComputeNode) Validate() error {
+	if c.name == "" {
+		return fmt.Errorf("compute node name is required")
+	}
+	if c.cpu <= 0 {
+		return fmt.Errorf("compute node CPU count must be > 0")
+	}
+	if c.memory <= 0 {
+		return fmt.Errorf("compute node memory must be > 0")
+	}
+	return nil
+}

@@ -1,6 +1,8 @@
 package proxmox
 
 import (
+	"fmt"
+
 	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve"
 	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve/cluster"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -47,12 +49,12 @@ func (p *Proxmox) GatherHosts(ctx *pulumi.Context) error {
 	}
 
 	if len(availableNodes.Names) == 0 {
-		ctx.Log.Error("No Proxmox nodes found", nil)
+		return fmt.Errorf("no Proxmox nodes found")
 	}
 
 	for i, node := range availableNodes.Names {
 		if node == "" {
-			ctx.Log.Error("Node name is empty at index "+string(rune(i)), nil)
+			return fmt.Errorf("node name is empty at index %d", i)
 		}
 
 		if !availableNodes.Onlines[i] {
@@ -66,6 +68,10 @@ func (p *Proxmox) GatherHosts(ctx *pulumi.Context) error {
 		newNode.SetName(node)
 		newNode.SetCPU(availableNodes.CpuCounts[i])
 		newNode.SetMemory(availableNodes.MemoryAvailables[i])
+
+		if err := newNode.Validate(); err != nil {
+			return fmt.Errorf("invalid compute node %s: %w", node, err)
+		}
 
 		*p.ComputeNodes = append(*p.ComputeNodes, newNode)
 	}
