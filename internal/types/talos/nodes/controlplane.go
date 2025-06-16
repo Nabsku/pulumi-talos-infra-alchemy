@@ -63,8 +63,9 @@ func (c *ControlPlaneNode) SetIP(ip pulumi.StringOutput) {
 	c.ip = ip
 }
 
-// Config returns a map representation of the ControlPlaneNode configuration
-// TODO: find a way to generate talos manifests.
+// Config returns a map representation of the ControlPlaneNode configuration.
+// NOTE: The "ip" field is a pulumi.StringOutput and must be handled with .ApplyT
+// if you need to use its value (e.g., for serialization or template rendering).
 func (c *ControlPlaneNode) Config() map[string]any {
 	return map[string]any{
 		"name": c.name,

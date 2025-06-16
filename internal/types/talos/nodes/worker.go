@@ -65,8 +65,9 @@ func (w *WorkerNode) Type() types.NodeType {
 	return types.Worker
 }
 
-// Config returns a map representation of the WorkerNode configuration
-// TODO: find a way to generate talos manifests.
+// Config returns a map representation of the WorkerNode configuration.
+// NOTE: The "ip" field is a pulumi.StringOutput and must be handled with .ApplyT
+// if you need to use its value (e.g., for serialization or template rendering).
 func (w *WorkerNode) Config() map[string]any {
 	return map[string]any{
 		"name":     w.name,
