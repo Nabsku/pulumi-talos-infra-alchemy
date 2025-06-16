@@ -181,7 +181,7 @@ customization:
 		}
 
 		// --- BEGIN: Collect control plane IPs and generate kubeconfig/talosconfig ---
-		var controlPlaneIPs []pulumi.StringOutput
+		var controlPlaneIPs []pulumi.Output
 		for _, node := range tCluster.Nodes {
 			if node.Type() == types.ControlPlane {
 				controlPlaneIPs = append(controlPlaneIPs, node.IP())
