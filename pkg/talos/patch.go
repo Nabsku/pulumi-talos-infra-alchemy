@@ -10,7 +10,7 @@ import (
 func YamlToJSON(yamlBytes []byte) ([]byte, error) {
 	var data any
 	if err := yaml.Unmarshal(yamlBytes, &data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
 	}
 	// Convert map[interface{}]interface{} to map[string]interface{}
 	data = convertKeysToString(data)

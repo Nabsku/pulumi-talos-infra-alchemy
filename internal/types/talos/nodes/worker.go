@@ -1,7 +1,6 @@
 package nodes
 
 import (
-	"fmt"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"proxmox-talos/internal/types"
 )
@@ -15,9 +14,7 @@ type WorkerNode struct {
 }
 
 // SetBootstrap is a no-op for worker nodes.
-func (w *WorkerNode) SetBootstrap(isBootstrap bool) {
-	_ = fmt.Sprintf("%s", isBootstrap)
-}
+func (w *WorkerNode) SetBootstrap(isBootstrap bool) {}
 
 // IsBootstrap always returns false for worker nodes.
 func (w *WorkerNode) IsBootstrap() bool {
@@ -41,12 +38,12 @@ func (w *WorkerNode) Pool() string {
 
 // Create is a stub for VM creation logic.
 func (w *WorkerNode) Create() error {
-	panic("Create not implemented for WorkerNode")
+	return nil
 }
 
 // Destroy is a stub for VM destruction logic.
 func (w *WorkerNode) Destroy() error {
-	panic("Destroy not implemented for WorkerNode")
+	return nil
 }
 
 // Name returns the name of the node.
