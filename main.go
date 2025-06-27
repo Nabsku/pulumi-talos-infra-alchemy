@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/template"
 
+	"proxmox-talos/internal/file"
 	"proxmox-talos/internal/types"
 	talosCluster "proxmox-talos/internal/types/talos/cluster"
 	"proxmox-talos/pkg/proxmox"
@@ -216,8 +217,8 @@ customization:
 						&bootstrapArgs, pulumi.DependsOn([]pulumi.Resource{apply}),
 						pulumi.Timeouts(&customTimeouts))
 
-					tCluster.MachineSecrets.ClientConfiguration.ApplyT(func(clientConfig machine.ClientConfiguration) (interface{}, error) {
-						return tCluster.Nodes[0].IP().ApplyT(func(nodeIP string) (interface{}, error) {
+					kc := tCluster.MachineSecrets.ClientConfiguration.ApplyT(func(clientConfig machine.ClientConfiguration) (any, error) {
+						return tCluster.Nodes[0].IP().ApplyT(func(nodeIP string) (any, error) {
 							args := &tsdk.KubeconfigArgs{
 								ClientConfiguration: &tsdk.KubeconfigClientConfigurationArgs{
 									ClientCertificate: pulumi.String(clientConfig.ClientCertificate),
@@ -231,17 +232,20 @@ customization:
 							if err != nil {
 								return nil, fmt.Errorf("failed to generate kubeconfig: %w", err)
 							}
-							fmt.Println("Kubeconfig generated successfully")
-							ctx.Export("kubeconfig", k)
 
 							k.KubeconfigRaw.ApplyT(func(kubeconfig string) error {
 								fmt.Println("Kubeconfig content:")
 								fmt.Println(kubeconfig)
+								file.WriteToFile("kubeconfig.yaml", kubeconfig)
 								return nil
 							})
-							return nil, nil
+
+							return k, nil
 						}), nil
 					})
+
+					tCluster.Kubeconfig = kc
+
 					if err != nil {
 						return err
 					}
@@ -251,6 +255,9 @@ customization:
 			})
 		}
 
+		// Export the Talos cluster secrets
+		ctx.Export("MachineSecrets", tCluster.MachineSecrets)
+		ctx.Export("Kubeconfig", tCluster.Kubeconfig)
 		ctx.Log.Info(fmt.Sprintf("Cluster %s is ready", tCluster.Name), nil)
 
 		ctx.Log.Info("Pulumi Talos Proxmox deployment completed successfully", nil)

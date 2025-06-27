@@ -3,12 +3,14 @@ package cluster
 import (
 	"errors"
 	"fmt"
+
+	"proxmox-talos/internal/types"
+	"proxmox-talos/internal/types/talos/nodes"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/client"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/cluster"
 	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
-	"proxmox-talos/internal/types"
-	"proxmox-talos/internal/types/talos/nodes"
 )
 
 // Cluster represents a Talos cluster and its configuration.
@@ -21,6 +23,7 @@ type Cluster struct {
 	KubernetesAPI     string                         `json:"kubernetesAPI"`
 	MachineSecrets    *machine.Secrets               `json:"machineSecrets,omitempty"`
 	ClientConfig      *client.GetConfigurationResult `json:"clientConfig,omitempty"`
+	Kubeconfig        pulumi.Output                  `json:"kubeconfig,omitempty"`
 }
 
 // NewCluster creates a new Cluster instance.
@@ -73,7 +76,6 @@ func (c *Cluster) GenerateMachineSecrets(ctx *pulumi.Context) error {
 	machineSecrets, err := machine.NewSecrets(ctx, "talos-secrets", &machine.SecretsArgs{
 		TalosVersion: pulumi.String(c.TalosVersion),
 	})
-
 	if err != nil {
 		if logErr := ctx.Log.Error("Creating Talos Secrets failed with: "+err.Error(), nil); logErr != nil {
 			return logErr
