@@ -1,0 +1,14 @@
+machine:
+  network:
+    hostname: {{ .Name }}
+    interfaces:
+      - deviceSelector:
+            busPath: "0*"
+        vip:
+          ip: 192.168.4.9
+        dhcp: true
+    kubespan:
+      enabled: true
+cluster:
+  discovery:
+    enabled: true

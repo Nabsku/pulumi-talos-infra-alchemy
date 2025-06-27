@@ -7,6 +7,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
+// We do this to fix a weird issue with the Proxmox provider where it always updates the VM disk speed settings
+var magicNumber = 9999999
+
 // VMConfig holds the configuration for creating a Proxmox VM.
 type VMConfig struct {
 	Name          string
@@ -39,9 +42,6 @@ func (cfg *VMConfig) Validate() error {
 	}
 	if cfg.NetworkBridge == "" {
 		return fmt.Errorf("VMConfig: NetworkBridge is required")
-	}
-	if cfg.CdromFileID == nil {
-		return fmt.Errorf("VMConfig: CdromFileID is required")
 	}
 	if cfg.Provider == nil {
 		return fmt.Errorf("VMConfig: Provider is required")
@@ -77,18 +77,18 @@ func CreateVM(ctx *pulumi.Context, cfg VMConfig) (*vm.VirtualMachine, pulumi.Str
 				Size:        pulumi.Int(cfg.DiskSizeGB),
 				DatastoreId: pulumi.String("local"),
 				Speed: &vm.VirtualMachineDiskSpeedArgs{
-					IopsRead:           pulumi.Int(0),
-					IopsReadBurstable:  pulumi.Int(0),
-					IopsWrite:          pulumi.Int(0),
-					IopsWriteBurstable: pulumi.Int(0),
-					Read:               pulumi.Int(0),
-					ReadBurstable:      pulumi.Int(0),
-					Write:              pulumi.Int(0),
-					WriteBurstable:     pulumi.Int(0),
+					IopsRead:           pulumi.Int(magicNumber),
+					IopsReadBurstable:  pulumi.Int(magicNumber),
+					IopsWrite:          pulumi.Int(magicNumber),
+					IopsWriteBurstable: pulumi.Int(magicNumber),
+					Read:               pulumi.Int(magicNumber),
+					ReadBurstable:      pulumi.Int(magicNumber),
+					Write:              pulumi.Int(magicNumber),
+					WriteBurstable:     pulumi.Int(magicNumber),
 				},
 			},
 		},
-		BootOrders: pulumi.StringArray{pulumi.String("virtio0"), pulumi.String("ide3")},
+		BootOrders:    pulumi.StringArray{pulumi.String("virtio0"), pulumi.String("ide3")},
 		StopOnDestroy: pulumi.Bool(true),
 		OperatingSystem: &vm.VirtualMachineOperatingSystemArgs{
 			Type: pulumi.String("l26"),

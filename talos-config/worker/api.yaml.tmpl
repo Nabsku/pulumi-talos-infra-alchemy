@@ -1,0 +1,12 @@
+machine:
+  network:
+    hostname: {{ .Name }}
+    interfaces:
+      - deviceSelector:
+            busPath: "0*"
+        dhcp: true
+    kubespan:
+      enabled: true
+cluster:
+  discovery:
+    enabled: true

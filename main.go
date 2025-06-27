@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve/cluster"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
-	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
-	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
+	"strings"
+	"text/template"
+
 	"proxmox-talos/internal/types"
 	talosCluster "proxmox-talos/internal/types/talos/cluster"
 	"proxmox-talos/pkg/proxmox"
 	"proxmox-talos/pkg/talos"
-	"strings"
-	"text/template"
+
+	"github.com/muhlba91/pulumi-proxmoxve/sdk/v7/go/proxmoxve/cluster"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
+	tsdk "github.com/pulumiverse/pulumi-talos/sdk/go/talos/cluster"
+	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/imagefactory"
+	"github.com/pulumiverse/pulumi-talos/sdk/go/talos/machine"
 )
 
 var (
@@ -52,10 +55,10 @@ func main() {
 		}
 
 		tCluster := talosCluster.NewCluster(talosClusterName, talosVersion, kubernetesVersion, talosApiVIP)
-		if err := tCluster.GenerateNodes(ctx, controlPlaneCount, types.ControlPlane); err != nil {
+		if err := tCluster.GenerateNodes(controlPlaneCount, types.ControlPlane); err != nil {
 			return ctx.Log.Error("Generating control plane nodes failed with: "+err.Error(), nil)
 		}
-		if err := tCluster.GenerateNodes(ctx, workerCount, types.Worker); err != nil {
+		if err := tCluster.GenerateNodes(workerCount, types.Worker); err != nil {
 			return ctx.Log.Error("Generating worker nodes failed with: "+err.Error(), nil)
 		}
 
@@ -71,7 +74,7 @@ func main() {
 			return err
 		}
 
-		if err := proxmoxStruct.GatherHosts(ctx); err != nil {
+		if err = proxmoxStruct.GatherHosts(ctx); err != nil {
 			return err
 		}
 
@@ -105,7 +108,7 @@ customization:
 			return ctx.Log.Error("Downloading Talos Image failed with: "+err.Error(), nil)
 		}
 
-		// Use the new VMConfig and CreateVM abstraction for VM creation
+		// Create VMs
 		for i, node := range tCluster.Nodes {
 			ctx.Log.Info(fmt.Sprintf("Creating VM for node: %s", node.Name()), nil)
 			vmConfig := proxmox.VMConfig{
@@ -152,70 +155,105 @@ customization:
 			json0 := string(tmpJSON0)
 			var cpPatchStr string
 
-			if node.Type() == types.ControlPlane {
-				var rendered bytes.Buffer
-				tmpl, err := template.ParseFiles("talos-config/controlplane/api.yaml.tmpl")
-				if err != nil {
-					return fmt.Errorf("failed to read controlplane API configuration: %w", err)
-				}
-				err = tmpl.Execute(&rendered, node)
-				if err != nil {
-					return fmt.Errorf("failed to render controlplane API configuration: %w", err)
-				}
+			var rendered bytes.Buffer
+			templatePath := "talos-config/REPLACE_WITH_NODE_TYPE/api.yaml.tmpl"
 
-				cpPatch, err := talos.YamlToJSON(rendered.Bytes())
-				if err != nil {
-					return fmt.Errorf("failed to convert controlplane API configuration to JSON: %w", err)
-				}
-				cpPatchStr = string(cpPatch)
+			switch node.Type() {
+			case types.ControlPlane:
+				templatePath = strings.Replace(templatePath, "REPLACE_WITH_NODE_TYPE", "controlplane", 1)
+			case types.Worker:
+				templatePath = strings.Replace(templatePath, "REPLACE_WITH_NODE_TYPE", "worker", 1)
+			default:
+				return fmt.Errorf("unknown node type: %s", node.Type())
 			}
+
+			tmpl, err := template.ParseFiles(templatePath)
+			if err != nil {
+				return fmt.Errorf("failed to read %v API configuration: %w", node.Type(), err)
+			}
+			err = tmpl.Execute(&rendered, node)
+			if err != nil {
+				return fmt.Errorf("failed to render %v API configuration: %w", node.Type(), err)
+			}
+
+			cpPatch, err := talos.YamlToJSON(rendered.Bytes())
+			if err != nil {
+				return fmt.Errorf("failed to convert %v API configuration to JSON: %w", node.Type(), err)
+			}
+			cpPatchStr = string(cpPatch)
 
 			configPatches := pulumi.StringArray{pulumi.String(json0)}
 			if cpPatchStr != "" {
 				configPatches = append(configPatches, pulumi.String(cpPatchStr))
 			}
 
-			applyArgs := machine.ConfigurationApplyArgs{
-				ClientConfiguration:       tCluster.MachineSecrets.ClientConfiguration,
-				MachineConfigurationInput: configuration.MachineConfiguration(),
-				Node:                      pulumi.String(node.Name()),
-				ConfigPatches:             configPatches,
-				Endpoint:                  node.IP(),
-			}
-
-			apply, err := machine.NewConfigurationApply(ctx, fmt.Sprintf("%s-configuration-apply", node.Name()),
-				&applyArgs)
-			if err != nil {
-				return ctx.Log.Error("Creating Talos Configuration Apply failed with: "+err.Error(), nil)
-			}
-
-			if node.IsBootstrap() {
-				bootstrapArgs := machine.BootstrapArgs{
-					ClientConfiguration: tCluster.MachineSecrets.ClientConfiguration,
-					Node:                node.IP(),
+			node.IP().ApplyT(func(nodeIP string) error {
+				applyArgs := machine.ConfigurationApplyArgs{
+					ClientConfiguration:       tCluster.MachineSecrets.ClientConfiguration,
+					MachineConfigurationInput: configuration.MachineConfiguration(),
+					Node:                      pulumi.String(node.Name()),
+					ConfigPatches:             configPatches,
+					Endpoint:                  pulumi.String(nodeIP),
 				}
 
-				customTimeouts := pulumi.CustomTimeouts{
-					Create: "10m",
-				}
-
-				_, err := machine.NewBootstrap(ctx, "bootstrap",
-					&bootstrapArgs, pulumi.DependsOn([]pulumi.Resource{apply}),
-					pulumi.Timeouts(&customTimeouts))
-
+				apply, err := machine.NewConfigurationApply(ctx, fmt.Sprintf("%s-configuration-apply", node.Name()),
+					&applyArgs)
 				if err != nil {
-					return ctx.Log.Error("Creating Talos Bootstrap failed with: "+err.Error(), nil)
+					return err
 				}
-				ctx.Log.Info(fmt.Sprintf("Node %s is bootstrapped", node.Name()), nil)
-			}
 
-			tCluster.WaitForReady(ctx)
-			ctx.Log.Info(fmt.Sprintf("Cluster %s is ready", tCluster.Name), nil)
+				if node.IsBootstrap() {
+					bootstrapArgs := machine.BootstrapArgs{
+						ClientConfiguration: tCluster.MachineSecrets.ClientConfiguration,
+						Node:                pulumi.String(nodeIP),
+					}
+
+					customTimeouts := pulumi.CustomTimeouts{
+						Create: "10m",
+					}
+
+					bootstrap, err := machine.NewBootstrap(ctx, "bootstrap",
+						&bootstrapArgs, pulumi.DependsOn([]pulumi.Resource{apply}),
+						pulumi.Timeouts(&customTimeouts))
+
+					tCluster.MachineSecrets.ClientConfiguration.ApplyT(func(clientConfig machine.ClientConfiguration) (interface{}, error) {
+						return tCluster.Nodes[0].IP().ApplyT(func(nodeIP string) (interface{}, error) {
+							args := &tsdk.KubeconfigArgs{
+								ClientConfiguration: &tsdk.KubeconfigClientConfigurationArgs{
+									ClientCertificate: pulumi.String(clientConfig.ClientCertificate),
+									ClientKey:         pulumi.String(clientConfig.ClientKey),
+									CaCertificate:     pulumi.String(clientConfig.CaCertificate),
+								},
+								Node: pulumi.String(nodeIP),
+							}
+
+							k, err := tsdk.NewKubeconfig(ctx, "talos-kubeconfig", args, pulumi.DependsOn([]pulumi.Resource{bootstrap, tCluster.MachineSecrets}))
+							if err != nil {
+								return nil, fmt.Errorf("failed to generate kubeconfig: %w", err)
+							}
+							fmt.Println("Kubeconfig generated successfully")
+							ctx.Export("kubeconfig", k)
+
+							k.KubeconfigRaw.ApplyT(func(kubeconfig string) error {
+								fmt.Println("Kubeconfig content:")
+								fmt.Println(kubeconfig)
+								return nil
+							})
+							return nil, nil
+						}), nil
+					})
+					if err != nil {
+						return err
+					}
+					ctx.Log.Info(fmt.Sprintf("Node %s is bootstrapped", node.Name()), nil)
+				}
+				return nil
+			})
 		}
 
-		if err := ctx.Log.Info("Pulumi Talos Proxmox deployment completed successfully", nil); err != nil {
-			ctx.Log.Error("Logging completion message failed: "+err.Error(), nil)
-		}
+		ctx.Log.Info(fmt.Sprintf("Cluster %s is ready", tCluster.Name), nil)
+
+		ctx.Log.Info("Pulumi Talos Proxmox deployment completed successfully", nil)
 
 		return nil
 	})

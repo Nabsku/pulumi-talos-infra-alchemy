@@ -34,7 +34,7 @@ func NewCluster(name, talosVersion, kubernetesVersion, kubernetesAPI string) *Cl
 }
 
 // GenerateNodes creates the specified number of nodes of the given type and adds them to the cluster.
-func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.NodeType) error {
+func (c *Cluster) GenerateNodes(amount int, nodeType types.NodeType) error {
 	for i := 0; i < amount; i++ {
 		var node types.Node
 		switch nodeType {
@@ -58,11 +58,11 @@ func (c *Cluster) GenerateNodes(ctx *pulumi.Context, amount int, nodeType types.
 }
 
 // GetNodesByType returns the names of nodes of the specified type.
-func (c *Cluster) GetNodesByType(nodeType types.NodeType) []string {
-	nodesOfType := []string{}
+func (c *Cluster) GetNodesByType(nodeType types.NodeType) []pulumi.StringOutput {
+	var nodesOfType []pulumi.StringOutput
 	for _, node := range c.Nodes {
 		if node.Type() == nodeType {
-			nodesOfType = append(nodesOfType, node.Name())
+			nodesOfType = append(nodesOfType, node.IP())
 		}
 	}
 	return nodesOfType
@@ -85,28 +85,76 @@ func (c *Cluster) GenerateMachineSecrets(ctx *pulumi.Context) error {
 }
 
 // WaitForReady waits for the Talos cluster to become healthy.
-func (c *Cluster) WaitForReady(ctx *pulumi.Context) {
-	if len(c.Nodes) == 0 || c.ClientConfig == nil {
-		return
+func (c *Cluster) WaitForReady(ctx *pulumi.Context) pulumi.Output {
+	if len(c.Nodes) == 0 {
+		_ = ctx.Log.Error("WaitForReady: cluster nodes are not set", nil)
 	}
 
-	args := &cluster.GetHealthArgs{
-		ClientConfiguration: cluster.GetHealthClientConfiguration{
-			ClientCertificate: c.ClientConfig.ClientConfiguration.ClientCertificate,
-			ClientKey:         c.ClientConfig.ClientConfiguration.ClientKey,
-			CaCertificate:     c.ClientConfig.ClientConfiguration.CaCertificate,
+	controlPlaneIPs := c.GetNodesByType(types.ControlPlane)
+	if len(controlPlaneIPs) == 0 {
+		_ = ctx.Log.Error("WaitForReady: no control plane node IPs found", nil)
+	}
+
+	controlPlaneInputs := make([]interface{}, len(controlPlaneIPs))
+	for i, ip := range controlPlaneIPs {
+		controlPlaneInputs[i] = ip
+	}
+
+	// Combine node IPs and MachineSecrets.ClientConfiguration Output
+	allOutputs := append(controlPlaneInputs, c.MachineSecrets.ClientConfiguration)
+	return pulumi.All(allOutputs...).ApplyT(func(args []interface{}) (string, error) {
+		var ipStrings []string
+		for i := 0; i < len(controlPlaneInputs); i++ {
+			if s, ok := args[i].(string); ok {
+				ipStrings = append(ipStrings, s)
+			}
+		}
+		clientConfig, ok := args[len(args)-1].(*machine.ClientConfiguration)
+		if !ok || clientConfig == nil {
+			_ = ctx.Log.Error("WaitForReady: MachineSecrets.ClientConfiguration is not set", nil)
+			return "MachineSecrets.ClientConfiguration is not set", errors.New("MachineSecrets.ClientConfiguration is not set")
+		}
+		healthArgs := &cluster.GetHealthArgs{
+			ClientConfiguration: cluster.GetHealthClientConfiguration{
+				ClientCertificate: clientConfig.ClientCertificate,
+				ClientKey:         clientConfig.ClientKey,
+				CaCertificate:     clientConfig.CaCertificate,
+			},
+			ControlPlaneNodes:    ipStrings,
+			Endpoints:            []string{c.KubernetesAPI},
+			SkipKubernetesChecks: nil,
+		}
+		_, err := cluster.GetHealth(ctx, healthArgs)
+		if err != nil {
+			_ = ctx.Log.Error("WaitForReady: GetHealth failed: "+err.Error(), nil)
+			return "GetHealth failed", err
+		}
+		return "ok", nil
+	})
+}
+
+func (c *Cluster) GenerateKubeconfig(ctx *pulumi.Context) error {
+	if c.ClientConfig == nil {
+		return errors.New("client configuration is not set")
+	}
+
+	args := &cluster.KubeconfigArgs{
+		ClientConfiguration: &cluster.KubeconfigClientConfigurationArgs{
+			ClientCertificate: c.MachineSecrets.ClientConfiguration.ClientCertificate(),
+			ClientKey:         c.MachineSecrets.ClientConfiguration.ClientKey(),
+			CaCertificate:     c.MachineSecrets.ClientConfiguration.CaCertificate(),
 		},
-		ControlPlaneNodes:    c.GetNodesByType(types.ControlPlane),
-		Endpoints:            []string{c.KubernetesAPI},
-		SkipKubernetesChecks: nil,
-		Timeouts:             nil,
-		WorkerNodes:          c.GetNodesByType(types.Worker),
+		Node: c.Nodes[0].IP(),
 	}
 
-	_, err := cluster.GetHealth(ctx, args)
+	fmt.Println(args)
+
+	k, err := cluster.NewKubeconfig(ctx, "talos-kubeconfig", args, pulumi.DependsOn([]pulumi.Resource{c.MachineSecrets}))
 	if err != nil {
-		_ = ctx.Log.Error("Waiting for Talos Cluster to be ready failed with: "+err.Error(), nil)
+		return fmt.Errorf("failed to generate kubeconfig: %w", err)
 	}
+	ctx.Export("kubeconfig", k.KubeconfigRaw)
+	return nil
 }
 
 // String returns a string representation of the cluster.

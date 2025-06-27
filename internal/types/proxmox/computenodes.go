@@ -1,6 +1,9 @@
 package proxmox
 
-import "net"
+import (
+	"fmt"
+	"net"
+)
 
 // ComputeNode represents a physical or virtual compute node in Proxmox.
 type ComputeNode struct {
