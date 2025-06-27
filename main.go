@@ -32,7 +32,7 @@ var (
 	talosPlatform     = "metal"
 	talosClusterName  = "talos"
 	talosVersion      = "v1.10.0"
-	talosApiVIP       = "https://192.168.4.9:6443"
+	talosAPIVIP       = "https://192.168.4.9:6443"
 	extensions        = []string{
 		"siderolabs/amdgpu",
 		"siderolabs/amd-ucode",
@@ -55,7 +55,7 @@ func main() {
 			return fmt.Errorf("control plane count must be odd")
 		}
 
-		tCluster := talosCluster.NewCluster(talosClusterName, talosVersion, kubernetesVersion, talosApiVIP)
+		tCluster := talosCluster.NewCluster(talosClusterName, talosVersion, kubernetesVersion, talosAPIVIP)
 		if err := tCluster.GenerateNodes(controlPlaneCount, types.ControlPlane); err != nil {
 			return ctx.Log.Error("Generating control plane nodes failed with: "+err.Error(), nil)
 		}
@@ -156,30 +156,34 @@ customization:
 			json0 := string(tmpJSON0)
 			var cpPatchStr string
 
-			var rendered bytes.Buffer
-			templatePath := "talos-config/REPLACE_WITH_NODE_TYPE/api.yaml.tmpl"
-
-			switch node.Type() {
-			case types.ControlPlane:
-				templatePath = strings.Replace(templatePath, "REPLACE_WITH_NODE_TYPE", "controlplane", 1)
-			case types.Worker:
-				templatePath = strings.Replace(templatePath, "REPLACE_WITH_NODE_TYPE", "worker", 1)
-			default:
-				return fmt.Errorf("unknown node type: %s", node.Type())
-			}
-
-			tmpl, err := template.ParseFiles(templatePath)
+			var mergedConfig string
+			files, err := file.GatherPatchFilesInDir(fmt.Sprintf("talos-config/%v", node.Type().String()))
 			if err != nil {
-				return fmt.Errorf("failed to read %v API configuration: %w", node.Type(), err)
+				return fmt.Errorf("failed to gather %v configuration files: %w", node.Type().String(), err)
 			}
+			fmt.Printf("Found %d configuration files for %s\n", len(files), node.Type().String())
+			if len(files) == 0 {
+				return fmt.Errorf("no control plane configuration files found")
+			}
+			mergedConfig, err = talos.MergeYaml(files...)
+			if err != nil {
+				return fmt.Errorf("failed to merge %v configuration files: %w", node.Type().String(), err)
+			}
+
+			tmpl, err := template.New("config").Parse(mergedConfig)
+			if err != nil {
+				return fmt.Errorf("failed to read %v API configuration: %w", node.Type().String(), err)
+			}
+
+			var rendered bytes.Buffer
 			err = tmpl.Execute(&rendered, node)
 			if err != nil {
-				return fmt.Errorf("failed to render %v API configuration: %w", node.Type(), err)
+				return fmt.Errorf("failed to render %v API configuration: %w", node.Type().String(), err)
 			}
 
 			cpPatch, err := talos.YamlToJSON(rendered.Bytes())
 			if err != nil {
-				return fmt.Errorf("failed to convert %v API configuration to JSON: %w", node.Type(), err)
+				return fmt.Errorf("failed to convert %v API configuration to JSON: %w", node.Type().String(), err)
 			}
 			cpPatchStr = string(cpPatch)
 
@@ -234,8 +238,6 @@ customization:
 							}
 
 							k.KubeconfigRaw.ApplyT(func(kubeconfig string) error {
-								fmt.Println("Kubeconfig content:")
-								fmt.Println(kubeconfig)
 								file.WriteToFile("kubeconfig.yaml", kubeconfig)
 								return nil
 							})
