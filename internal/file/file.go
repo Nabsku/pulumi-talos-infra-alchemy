@@ -1,7 +1,11 @@
 // Package file provides file-related utilities.
 package file
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
 func WriteToFile(fileName, content string) error {
 	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0o644)
@@ -20,4 +24,24 @@ func WriteToFile(fileName, content string) error {
 	}
 
 	return nil
+}
+
+func GatherPatchFilesInDir(configDir string) ([]string, error) {
+	f, err := os.ReadDir(configDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+
+	for _, file := range f {
+		if !strings.Contains(file.Name(), "yaml") {
+			continue
+		}
+		if !file.IsDir() {
+			files = append(files, fmt.Sprintf("%s/%s", configDir, file.Name()))
+		}
+	}
+
+	return files, nil
 }
